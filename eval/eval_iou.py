@@ -22,6 +22,7 @@ from dataset import cityscapes
 from erfnet import ERFNet
 from transform import Relabel, ToLabel, Colorize
 from iouEval import iouEval, getColorEntry
+import cityscape_mapping
 
 NUM_CHANNELS = 3
 NUM_CLASSES = 20
@@ -81,7 +82,12 @@ def main(args):
 
     start = time.time()
 
+
+    print(loader.__len__())
+
     for step, (images, labels, filename, filenameGt) in enumerate(loader):
+        print(step, images, labels, filename, filenameGt)
+        print("we are here")
         if (not args.cpu):
             images = images.cuda()
             labels = labels.cuda()

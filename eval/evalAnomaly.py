@@ -4,6 +4,10 @@ import cv2
 import glob
 import torch
 import random
+
+import torch.nn.functional as F
+
+
 from PIL import Image
 import numpy as np
 from erfnet import ERFNet
@@ -24,6 +28,18 @@ NUM_CLASSES = 20
 # gpu training specific
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True
+
+def get_max_logit(logits):
+    """Get the maximum logit from the model's output."""
+    max_logit = torch.max(logits, dim=0)[0]
+    return max_logit
+
+def calculate_entropy(logits):
+    """Calculate the entropy of the softmax output."""
+    softmax = F.softmax(logits, dim=0)
+    log_softmax = torch.log(softmax + 1e-10)  # Add epsilon to avoid log(0)
+    entropy = -torch.sum(softmax * log_softmax, dim=0)
+    return entropy
 
 def main():
     parser = ArgumentParser()
@@ -78,13 +94,29 @@ def main():
     print ("Model and weights LOADED successfully")
     model.eval()
     
+    #print('we are here')
+    #print(glob.glob(os.path.expanduser(str(args.input[0]))))
+
     for path in glob.glob(os.path.expanduser(str(args.input[0]))):
+        
         print(path)
         images = torch.from_numpy(np.array(Image.open(path).convert('RGB'))).unsqueeze(0).float()
         images = images.permute(0,3,1,2)
         with torch.no_grad():
             result = model(images)
-        anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)            
+        
+        # Calculate MSP anomaly score
+        anomaly_result_msp = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0) 
+
+        # Calculate Max-Entropy anomaly score
+        entropy_result = calculate_entropy(result.squeeze(0))
+        anomaly_result_entropy = entropy_result.data.cpu().numpy()
+
+        # Calculate Max Logit anomaly score
+        max_logit_result = get_max_logit(result.squeeze(0))
+        anomaly_result_max_logit = max_logit_result.data.cpu().numpy()
+
+
         pathGT = path.replace("images", "labels_masks")                
         if "RoadObsticle21" in pathGT:
            pathGT = pathGT.replace("webp", "png")
@@ -112,34 +144,80 @@ def main():
             continue              
         else:
              ood_gts_list.append(ood_gts)
-             anomaly_score_list.append(anomaly_result)
-        del result, anomaly_result, ood_gts, mask
+             anomaly_score_list.append({
+                'msp': anomaly_result_msp,
+                'max_logit': anomaly_result_max_logit,
+                'max_entropy': anomaly_result_entropy,
+            })
+             #anomaly_score_list.append( anomaly_result_msp)
+             #anomaly_score_list.append(anomaly_result_entropy)
+        del result, anomaly_result_msp, anomaly_result_entropy, anomaly_result_max_logit, ood_gts, mask
         torch.cuda.empty_cache()
 
     file.write( "\n")
 
     ood_gts = np.array(ood_gts_list)
-    anomaly_scores = np.array(anomaly_score_list)
 
+    # Extract anomaly scores
+    anomaly_scores = {
+        'msp': np.array([item['msp'] for item in anomaly_score_list]),
+        'max_logit': np.array([item['max_logit'] for item in anomaly_score_list]),
+        'max_entropy': np.array([item['max_entropy'] for item in anomaly_score_list]),
+    }
     ood_mask = (ood_gts == 1)
     ind_mask = (ood_gts == 0)
 
-    ood_out = anomaly_scores[ood_mask]
-    ind_out = anomaly_scores[ind_mask]
+    ood_out_msp = anomaly_scores['msp'][ood_mask]
+    ind_out_msp = anomaly_scores['msp'][ind_mask]
 
-    ood_label = np.ones(len(ood_out))
-    ind_label = np.zeros(len(ind_out))
-    
-    val_out = np.concatenate((ind_out, ood_out))
+    ood_out_max_logit = anomaly_scores['max_logit'][ood_mask]
+    ind_out_max_logit = anomaly_scores['max_logit'][ind_mask]
+
+    ood_out_max_Entropy = anomaly_scores['max_entropy'][ood_mask]
+    ind_out_max_Entropy = anomaly_scores['max_entropy'][ind_mask]
+
+
+    ood_label = np.ones(len(ood_out_msp))
+    ind_label = np.zeros(len(ind_out_msp))
+
+    val_out_msp = np.concatenate((ind_out_msp, ood_out_msp))
+    val_out_max_logit = np.concatenate((ind_out_max_logit, ood_out_max_logit))
+    val_out_max_Entropy = np.concatenate((ind_out_max_Entropy, ood_out_max_Entropy))
+
     val_label = np.concatenate((ind_label, ood_label))
 
-    prc_auc = average_precision_score(val_label, val_out)
-    fpr = fpr_at_95_tpr(val_out, val_label)
 
-    print(f'AUPRC score: {prc_auc*100.0}')
-    print(f'FPR@TPR95: {fpr*100.0}')
+    if len(ood_gts_list) > 0 and len(anomaly_score_list) > 0:
+        if np.any(ood_mask) and np.any(ind_mask):
+            prc_auc_msp = average_precision_score(val_label, val_out_msp)
+            fpr_msp = fpr_at_95_tpr(val_out_msp, val_label)
 
-    file.write(('    AUPRC score:' + str(prc_auc*100.0) + '   FPR@TPR95:' + str(fpr*100.0) ))
+            prc_auc_max_logit = average_precision_score(val_label, val_out_max_logit)
+            fpr_max_logit = fpr_at_95_tpr(val_out_max_logit, val_label)
+
+            prc_auc_max_entropy = average_precision_score(val_label, val_out_max_Entropy)
+            fpr_max_entropy = fpr_at_95_tpr(val_out_max_Entropy, val_label)
+
+            print(f'MSP AUPRC score: {prc_auc_msp * 100.0}')
+            print(f'MSP FPR@TPR95: {fpr_msp * 100.0}')
+
+            print(f'Max Logit AUPRC score: {prc_auc_max_logit * 100.0}')
+            print(f'Max Logit FPR@TPR95: {fpr_max_logit * 100.0}')
+
+            print(f'Max Entropy AUPRC score: {prc_auc_max_entropy * 100.0}')
+            print(f'Max Entropy FPR@TPR95: {fpr_max_entropy * 100.0}')
+
+            file.write(f'MSP AUPRC score: {prc_auc_msp * 100.0}, MSP FPR@TPR95: {fpr_msp * 100.0}\n')
+            file.write(f'Max Logit AUPRC score: {prc_auc_max_logit * 100.0}, Max Logit FPR@TPR95: {fpr_max_logit * 100.0}\n')
+            file.write(f'Max Entropy AUPRC score: {prc_auc_max_entropy * 100.0}, Max Entropy FPR@TPR95: {fpr_max_entropy * 100.0}\n')
+        
+        else:
+            print("No elements selected by masks")
+    else:
+        print("Source arrays are empty")
+        print(ood_gts)
+        print(anomaly_scores)
+    
     file.close()
 
 if __name__ == '__main__':
