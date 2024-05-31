@@ -86,8 +86,8 @@ def main(args):
     print(loader.__len__())
 
     for step, (images, labels, filename, filenameGt) in enumerate(loader):
-        print(step, images, labels, filename, filenameGt)
-        print("we are here")
+        # print(step, images, labels, filename, filenameGt)
+        # print("we are here")
         if (not args.cpu):
             images = images.cuda()
             labels = labels.cuda()
@@ -100,7 +100,7 @@ def main(args):
 
         filenameSave = filename[0].split("leftImg8bit/")[1] 
 
-        print (step, filenameSave)
+        # print (step, filenameSave)
 
 
     iouVal, iou_classes = iouEvalVal.getIoU()

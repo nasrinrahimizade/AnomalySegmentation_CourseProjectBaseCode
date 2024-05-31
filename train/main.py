@@ -234,7 +234,7 @@ def train(args, model, enc=False):
             loss.backward()
             optimizer.step()
 
-            epoch_loss.append(loss.data[0])
+            epoch_loss.append(loss.data)
             time_train.append(time.time() - start_time)
 
             if (doIouTrain):
@@ -294,7 +294,7 @@ def train(args, model, enc=False):
             outputs = model(inputs, only_encode=enc) 
 
             loss = criterion(outputs, targets[:, 0])
-            epoch_loss_val.append(loss.data[0])
+            epoch_loss_val.append(loss.data)
             time_val.append(time.time() - start_time)
 
 
@@ -487,9 +487,9 @@ if __name__ == '__main__':
     parser.add_argument('--state')
 
     parser.add_argument('--port', type=int, default=8097)
-    parser.add_argument('--datadir', default=os.getenv("HOME") + "/datasets/cityscapes/")
+    parser.add_argument('--datadir', default="F:\\polito\\term3\\AML\\term4\\project\\AnomalySegmentation_CourseProjectBaseCode\\cityscapes\\leftImg8bit_trainvaltest")
     parser.add_argument('--height', type=int, default=512)
-    parser.add_argument('--num-epochs', type=int, default=150)
+    parser.add_argument('--num-epochs', type=int, default=1)
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=6)
     parser.add_argument('--steps-loss', type=int, default=50)
