@@ -55,6 +55,7 @@ def main():
     # a bit verbose
     print("Processing {} annotation files".format(len(files)))
 
+    #a comment
     # iterate through files
     progress = 0
     print("Progress: {:>3} %".format( progress * 100 / len(files) ), end=' ')
