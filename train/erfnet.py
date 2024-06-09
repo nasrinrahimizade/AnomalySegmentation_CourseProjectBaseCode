@@ -8,6 +8,10 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 
+
+from losses.isomaxplus import IsoMaxPlusLossFirstPart, IsoMaxPlusLossSecondPart
+
+
 class DownsamplerBlock (nn.Module):
     def __init__(self, ninput, noutput):
         super().__init__()
@@ -81,7 +85,11 @@ class Encoder(nn.Module):
             self.layers.append(non_bottleneck_1d(128, 0.3, 16))
 
         #Only in encoder mode:
-        self.output_conv = nn.Conv2d(128, num_classes, 1, stride=1, padding=0, bias=True)
+        #self.output_conv = nn.Conv2d(128, num_classes, 1, stride=1, padding=0, bias=True)
+        self.classifier = IsoMaxPlusLossFirstPart(128, num_classes)
+
+
+
 
     def forward(self, input, predict=False):
         output = self.initial_block(input)
