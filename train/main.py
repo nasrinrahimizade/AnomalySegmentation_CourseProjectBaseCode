@@ -29,7 +29,7 @@ from iouEval import iouEval, getColorEntry
 from shutil import copyfile
 
 
-from losses.isomaxplus import IsoMaxPlusLossSecondPart
+from isomaxplus import IsoMaxPlusLossSecondPart
 
 # criterion = IsoMaxPlusLossSecondPart()
 
@@ -238,11 +238,14 @@ def train(args, model, enc=False):
             #print("targets", np.unique(targets[:, 0].cpu().data.numpy()))
 
             optimizer.zero_grad()
-            loss = criterion(outputs, targets[:, 0])
+
+            targets_squeezed = targets[:, 0, 0, 0].squeeze()
+            print("targets_squeezed", targets_squeezed.shape)
+            loss = criterion(outputs, targets_squeezed)
             loss.backward()
             optimizer.step()
 
-            epoch_loss.append(loss.data[0])
+            epoch_loss.append(loss.item())
             time_train.append(time.time() - start_time)
 
             if (doIouTrain):
@@ -495,7 +498,7 @@ if __name__ == '__main__':
     parser.add_argument('--state')
 
     parser.add_argument('--port', type=int, default=8097)
-    parser.add_argument('--datadir', default=os.getenv("HOME") + "/datasets/cityscapes/")
+    parser.add_argument('--datadir', default="../cityscapes/leftImg8bit_trainvaltest/")
     parser.add_argument('--height', type=int, default=512)
     parser.add_argument('--num-epochs', type=int, default=150)
     parser.add_argument('--num-workers', type=int, default=4)

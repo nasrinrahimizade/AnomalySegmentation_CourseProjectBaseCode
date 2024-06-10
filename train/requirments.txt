@@ -1,0 +1,10 @@
+torch >= 1.10
+torchvision
+torchmetrics
+torchnet
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+tqdm
